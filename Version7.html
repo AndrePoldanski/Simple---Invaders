@@ -1,0 +1,1101 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport"
+content="width=device-width, initial-scale=1.0">
+
+<title>Space Invaders V8</title>
+
+<style>
+
+body{
+    margin:0;
+    background:#000;
+    overflow:hidden;
+    color:#fff;
+    font-family:Arial,sans-serif;
+}
+
+#score{
+    position:absolute;
+    top:10px;
+    left:10px;
+    font-size:24px;
+    z-index:10;
+}
+
+#highscores{
+    position:absolute;
+    top:50px;
+    left:10px;
+    font-size:16px;
+    z-index:10;
+    line-height:1.4;
+}
+
+canvas{
+    display:block;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div id="score">
+Score: 0
+</div>
+
+<div id="highscores">
+Loading...
+</div>
+
+<canvas id="game"></canvas>
+
+<script>
+
+const canvas =
+document.getElementById("game");
+
+const ctx =
+canvas.getContext("2d");
+
+canvas.width =
+window.innerWidth;
+
+canvas.height =
+window.innerHeight;
+
+let score = 0;
+
+let gameState =
+"playing";
+
+let animTimer = 0;
+
+let animFrame = 0;
+
+let highScores =
+
+JSON.parse(
+
+localStorage.getItem(
+"spaceInvadersHighScores"
+)
+
+)
+
+||
+
+[
+
+{name:"AAA",score:1000},
+
+{name:"BBB",score:800},
+
+{name:"CCC",score:600},
+
+{name:"DDD",score:400},
+
+{name:"EEE",score:200}
+
+];
+
+function saveHighScores(){
+
+localStorage.setItem(
+
+"spaceInvadersHighScores",
+
+JSON.stringify(
+highScores
+)
+
+);
+
+}
+
+function displayHighScores(){
+
+let text =
+"High Scores<br>";
+
+highScores.forEach(
+
+entry=>{
+
+text +=
+
+entry.name +
+
+" " +
+
+entry.score +
+
+"<br>";
+
+}
+
+);
+
+document
+.getElementById(
+"highscores"
+)
+.innerHTML =
+text;
+
+}
+
+displayHighScores();
+
+
+let audioCtx = null;
+
+function getAudioCtx(){
+
+    if(!audioCtx){
+
+        const AudioContextClass =
+
+        window.AudioContext ||
+
+        window.webkitAudioContext;
+
+        if(AudioContextClass){
+
+            audioCtx =
+            new AudioContextClass();
+
+        }
+
+    }
+
+    if(
+       audioCtx &&
+       audioCtx.state==="suspended"
+    ){
+
+        audioCtx.resume();
+
+    }
+
+    return audioCtx;
+
+}
+
+function playShoot(){
+
+    try{
+
+        const ac =
+        getAudioCtx();
+
+        if(!ac) return;
+
+        const osc =
+        ac.createOscillator();
+
+        const gain =
+        ac.createGain();
+
+        osc.connect(gain);
+
+        gain.connect(
+            ac.destination
+        );
+
+        osc.type="square";
+
+        osc.frequency.value=500;
+
+        gain.gain.value=0.1;
+
+        osc.start();
+
+        osc.frequency
+        .exponentialRampToValueAtTime(
+
+            200,
+
+            ac.currentTime + 0.1
+
+        );
+
+        osc.stop(
+            ac.currentTime + 0.1
+        );
+
+    }
+
+    catch(e){}
+
+}
+
+function playExplosion(){
+
+    try{
+
+        const ac =
+        getAudioCtx();
+
+        if(!ac) return;
+
+        const osc =
+        ac.createOscillator();
+
+        const gain =
+        ac.createGain();
+
+        osc.connect(gain);
+
+        gain.connect(
+            ac.destination
+        );
+
+        osc.type="sawtooth";
+
+        osc.frequency.value=120;
+
+        gain.gain.value=0.15;
+
+        osc.start();
+
+        osc.frequency
+        .exponentialRampToValueAtTime(
+
+            50,
+
+            ac.currentTime + 0.2
+
+        );
+
+        osc.stop(
+            ac.currentTime + 0.2
+        );
+
+    }
+
+    catch(e){}
+
+}
+
+const player = {
+
+    x:canvas.width/2,
+
+    y:canvas.height-80,
+
+    speed:8
+
+};
+
+const ufo = {
+
+    x:-60,
+
+    y:25,
+
+    speed:3,
+
+    active:false
+
+};
+
+const bullet = {
+
+    x:0,
+    y:0,
+
+    active:false
+
+};
+
+let alienBullets = [];
+
+let left  = false;
+let right = false;
+
+let aliens = [];
+
+const rows = 3;
+const cols = 8;
+
+let alienDirection = 1;
+let alienSpeed = 1.5;
+
+function initGame(){
+
+    score = 0;
+
+    document
+    .getElementById(
+    "score"
+    )
+    .innerText =
+    "Score: " + score;
+
+    displayHighScores();
+
+    gameState =
+    "playing";
+
+    animTimer = 0;
+
+    animFrame = 0;
+
+    player.x =
+    canvas.width/2;
+
+    bullet.active =
+    false;
+
+    alienBullets = [];
+
+    ufo.active = false;
+
+    ufo.x = -60;
+
+    aliens = [];
+
+    alienDirection = 1;
+
+    alienSpeed = 1.5;
+
+    for(
+       let r=0;
+       r<rows;
+       r++
+    ){
+
+        for(
+           let c=0;
+           c<cols;
+           c++
+        ){
+
+            aliens.push({
+
+                x:100+c*70,
+
+                y:60+r*60,
+
+                row:r,
+
+                alive:true
+
+            });
+
+        }
+
+    }
+
+}
+
+initGame();
+
+
+document.addEventListener(
+
+"keydown",
+
+e=>{
+
+    if(e.key==="ArrowLeft")
+        left=true;
+
+    if(e.key==="ArrowRight")
+        right=true;
+
+    if(
+       e.key===" " &&
+       !bullet.active &&
+       gameState==="playing"
+    ){
+
+        bullet.x =
+        player.x + 14;
+
+        bullet.y =
+        player.y;
+
+        bullet.active =
+        true;
+
+        playShoot();
+
+    }
+
+    if(
+       (
+       e.key==="r" ||
+       e.key==="R" ||
+       e.key==="Enter"
+       ) &&
+       gameState!=="playing"
+    ){
+
+        initGame();
+
+    }
+
+});
+
+document.addEventListener(
+
+"keyup",
+
+e=>{
+
+    if(e.key==="ArrowLeft")
+        left=false;
+
+    if(e.key==="ArrowRight")
+        right=false;
+
+});
+
+function drawAlien(
+x,
+y,
+row,
+frame
+){
+
+const pixel=4;
+
+const shapes=[
+
+[
+[
+"00100100",
+"10111101",
+"11111111",
+"11011011",
+"01111110",
+"10100101"
+],
+
+[
+"00100100",
+"00111100",
+"01111110",
+"11011011",
+"11111111",
+"01011010"
+]
+],
+
+[
+[
+"00011000",
+"00111100",
+"11111111",
+"11011011",
+"10111101",
+"10000001"
+],
+
+[
+"00011000",
+"00111100",
+"01111110",
+"11011011",
+"01111110",
+"00100100"
+]
+],
+
+[
+[
+"00111100",
+"11111111",
+"11011011",
+"11111111",
+"01100110",
+"11000011"
+],
+
+[
+"00111100",
+"01111110",
+"11011011",
+"11111111",
+"00111100",
+"01100110"
+]
+]
+
+];
+
+const colours=[
+
+"#00ff00",
+"#00ffff",
+"#ffff00"
+
+];
+
+const shape =
+
+shapes[row][frame];
+
+ctx.fillStyle =
+colours[row];
+
+for(let r=0;
+    r<shape.length;
+    r++){
+
+for(let c=0;
+    c<shape[r].length;
+    c++){
+
+if(shape[r][c]==="1"){
+
+ctx.fillRect(
+
+x+c*pixel,
+
+y+r*pixel,
+
+pixel,
+
+pixel
+
+);
+
+}
+
+}
+
+}
+
+}
+
+function drawPlayer(){
+
+const pixel=4;
+
+const ship=[
+
+"0001000",
+"0011100",
+"0111110",
+"1111111",
+"1100011"
+
+];
+
+ctx.fillStyle=
+"#ffffff";
+
+for(let r=0;
+    r<ship.length;
+    r++){
+
+for(let c=0;
+    c<ship[r].length;
+    c++){
+
+if(ship[r][c]==="1"){
+
+ctx.fillRect(
+
+player.x+
+c*pixel,
+
+player.y+
+r*pixel,
+
+pixel,
+
+pixel
+
+);
+
+}
+
+}
+
+}
+
+}
+
+
+function drawUFO(){
+
+const pixel=4;
+
+const shape=[
+
+"00011111000",
+"01111111110",
+"11011011011",
+"11111111111",
+"00110001100"
+
+];
+
+ctx.fillStyle="#ff00ff";
+
+for(let r=0;
+    r<shape.length;
+    r++){
+
+for(let c=0;
+    c<shape[r].length;
+    c++){
+
+if(shape[r][c]==="1"){
+
+ctx.fillRect(
+
+ufo.x+c*pixel,
+ufo.y+r*pixel,
+pixel,
+pixel
+
+);
+
+}
+
+}
+
+}
+
+}
+
+function recordHighScore(){
+
+let lowestScore =
+
+highScores[
+highScores.length-1
+].score;
+
+if(
+
+score > lowestScore
+
+){
+
+let initials =
+
+prompt(
+
+"NEW HIGH SCORE!\n\nEnter Initials",
+
+"AAA"
+
+);
+
+if(!initials)
+initials = "AAA";
+
+initials =
+
+initials
+.toUpperCase()
+.substring(0,3);
+
+highScores.push({
+
+name:initials,
+
+score:score
+
+});
+
+highScores.sort(
+
+(a,b)=>
+
+b.score-a.score
+
+);
+
+highScores =
+
+highScores.slice(
+0,
+5
+);
+
+saveHighScores();
+
+displayHighScores();
+
+}
+
+}
+
+function update(){
+
+if(gameState!=="playing")
+return;
+
+animTimer++;
+
+if(animTimer>20){
+
+animFrame =
+animFrame===0
+? 1
+: 0;
+
+animTimer=0;
+
+}
+
+if(left)
+player.x-=player.speed;
+
+if(right)
+player.x+=player.speed;
+
+player.x=
+Math.max(
+0,
+Math.min(
+canvas.width-40,
+player.x
+)
+);
+
+if(bullet.active){
+
+bullet.y-=10;
+
+if(bullet.y<0)
+bullet.active=false;
+
+}
+
+if(
+!ufo.active &&
+Math.random()<0.002
+){
+
+ufo.active=true;
+
+ufo.x=-50;
+
+}
+
+if(ufo.active){
+
+ufo.x+=ufo.speed;
+
+if(ufo.x>canvas.width){
+
+ufo.active=false;
+
+}
+
+if(
+
+bullet.active &&
+
+bullet.x>ufo.x &&
+bullet.x<ufo.x+44 &&
+
+bullet.y>ufo.y &&
+bullet.y<ufo.y+20
+
+){
+
+ufo.active=false;
+
+bullet.active=false;
+
+playExplosion();
+
+score+=200;
+
+document
+.getElementById(
+"score"
+)
+.innerText=
+"Score: "+score;
+
+}
+
+}
+
+if(
+Math.random()<0.01
+){
+
+const shooters=
+
+aliens.filter(
+a=>a.alive
+);
+
+if(shooters.length){
+
+const shooter=
+
+shooters[
+Math.floor(
+Math.random()*
+shooters.length
+)
+];
+
+alienBullets.push({
+
+x:shooter.x+16,
+
+y:shooter.y+20
+
+});
+
+}
+
+}
+
+alienBullets.forEach(
+
+b=>{
+
+b.y+=4;
+
+});
+
+alienBullets.forEach(
+
+(b,index)=>{
+
+if(
+
+b.x>player.x &&
+b.x<player.x+50 &&
+
+b.y>player.y &&
+b.y<player.y+30
+
+){
+
+score=
+Math.max(
+0,
+score-10
+);
+
+document
+.getElementById(
+"score"
+)
+.innerText=
+"Score: "+score;
+
+alienBullets.splice(
+index,
+1
+);
+
+playExplosion();
+
+}
+
+});
+
+let turn=false;
+
+let aliveCount=0;
+
+aliens.forEach(
+
+alien=>{
+
+if(!alien.alive)
+return;
+
+aliveCount++;
+
+alien.x+=
+alienSpeed*
+alienDirection;
+
+if(
+
+alien.x<10 ||
+
+alien.x>
+canvas.width-60
+
+){
+
+turn=true;
+
+}
+
+if(
+
+bullet.active &&
+
+bullet.x>alien.x &&
+bullet.x<alien.x+40 &&
+
+bullet.y>alien.y &&
+bullet.y<alien.y+30
+
+){
+
+alien.alive=false;
+
+aliveCount--;
+
+bullet.active=false;
+
+playExplosion();
+
+score +=
+(3-alien.row)*10;
+
+document
+.getElementById(
+"score"
+)
+.innerText=
+"Score: "+score;
+
+}
+
+});
+
+if(aliveCount===0){
+
+recordHighScore();
+
+gameState="win";
+
+}
+
+if(turn){
+
+alienDirection*=-1;
+
+aliens.forEach(
+
+alien=>{
+
+alien.y+=20;
+
+});
+
+}
+
+}
+
+function draw(){
+
+ctx.clearRect(
+0,
+0,
+canvas.width,
+canvas.height
+);
+
+drawPlayer();
+
+if(ufo.active)
+drawUFO();
+
+if(bullet.active){
+
+ctx.fillStyle=
+"#ffffff";
+
+ctx.fillRect(
+bullet.x,
+bullet.y,
+4,
+12
+);
+
+}
+
+ctx.fillStyle=
+"#ff4444";
+
+alienBullets.forEach(
+
+b=>{
+
+ctx.fillRect(
+b.x,
+b.y,
+3,
+10
+);
+
+});
+
+aliens.forEach(
+
+alien=>{
+
+if(alien.alive){
+
+drawAlien(
+alien.x,
+alien.y,
+alien.row,
+animFrame
+);
+
+}
+
+});
+
+if(
+gameState==="win"
+){
+
+ctx.fillStyle=
+"#00ff00";
+
+ctx.font=
+"48px Arial";
+
+ctx.fillText(
+
+"Game Complete",
+
+canvas.width/2-120,
+
+canvas.height/2
+
+);
+
+}
+
+}
+
+function gameLoop(){
+
+update();
+
+draw();
+
+requestAnimationFrame(
+gameLoop
+);
+
+}
+
+gameLoop();
+
+</script>
+
+</body>
+</html>
